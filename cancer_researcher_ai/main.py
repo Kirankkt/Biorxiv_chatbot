@@ -73,9 +73,17 @@ def main():
         vector_store = FAISS.load_local(f"{dir_path}/faiss_index", embeddings,allow_dangerous_deserialization=True)
         retriever = vector_store.as_retriever(search_kwargs={"k": 5})
     else:
-      vector_store = FAISS.from_texts(documents, embeddings)
-      vector_store.save_local(f"{dir_path}/faiss_index")
-      retriever = vector_store.as_retriever(search_kwargs={"k": 5})
+        # Split long rows into smaller chunks so embedding requests stay under token limits
+        splitter = RecursiveCharacterTextSplitter(
+            chunk_size=1200,      # tokens-ish (actually chars if using default), but safe
+            chunk_overlap=150
+        )
+        chunks = splitter.split_text("\n\n".join(documents))
+    
+        # Build FAISS index on chunks (LangChain embeds in batches internally)
+        vector_store = FAISS.from_texts(chunks, embeddings)
+        vector_store.save_local(f"{dir_path}/faiss_index")
+        retriever = vector_store.as_retriever(search_kwargs={"k": 5})
 
     # Contextualize question
     contextualize_q_system_prompt = (
@@ -166,4 +174,5 @@ def main():
 
 
 if __name__ == '__main__':
+
     main()
